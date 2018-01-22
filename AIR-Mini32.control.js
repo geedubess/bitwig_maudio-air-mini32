@@ -1,5 +1,11 @@
 // M-Audio Axiom A.I.R. Mini32 Controller Script for BitWig
 
+// TODO:
+// switch to api2
+// add preroll
+// add quantization
+// use cursor keys to select clip?
+
 loadAPI (1);
 
 host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
@@ -7,8 +13,10 @@ host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
 
 host.defineMidiPorts (2, 2); // Mini32 MIDI ports: must use both
 
-host.addDeviceNameBasedDiscoveryPair (["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"],
-                                      ["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"]);
+host.addDeviceNameBasedDiscoveryPair ([ "Axiom A.I.R. Mini32 MIDI 1",
+                                        "Axiom A.I.R. Mini32 MIDI 2" ],
+                                      [ "Axiom A.I.R. Mini32 MIDI 1",
+                                        "Axiom A.I.R. Mini32 MIDI 2" ]);
 
 var M32 = {
     midiMapCC:  {
@@ -29,6 +37,7 @@ var M32 = {
                  30: "KNOB_7",
                  31: "KNOB_8",
                  58: "MODE", // Used in Midi1 only
+                 64: "SUSTAIN",
                  },
 
     KNOB_START_CC: 24,
@@ -36,25 +45,28 @@ var M32 = {
     LOWEST_CC: 1,
     HIGHEST_CC: 119,
 
-    selectedTrack: 0,
     isShift: false,
     isMode: 0,
     isSubMode: 1,
-    isPreroll: 0,
+    isDebug: 0,
 
-    modeName: [ // Modes and respective subModes nested array
+    modeName: [ // Modes and respective subModes
         ARRANGER = ["ARRANGER",
                         "TRACK", "DEVICE"],
-        MIXER =    ["MIXER", "VOLUME", "PAN", "DEVICE",
-                             "SEND 1", "SEND 2", "SEND 3", "SEND 4",
-                             "SEND 5", "SEND 6", "SEND 7", "SEND 8"] ],
+        MIXER =    ["MIXER",
+                        "VOLUME", "PAN", "DEVICE",
+                        "SEND 1", "SEND 2", "SEND 3", "SEND 4",
+                        "SEND 5", "SEND 6", "SEND 7", "SEND 8"] ],
 };
 
 var debugLastFuncName = "";
 
 function debugMidi (msg)
     {
-    //println (msg);
+    if (M32.isDebug)
+        {
+        println (msg);
+        }
     }
 
 function debugControl (buttonStr, val, action)
@@ -63,8 +75,12 @@ function debugControl (buttonStr, val, action)
     modeSubMode = M32.modeName[ M32.isMode ][ M32.isSubMode ];
     shift = M32.isShift ? "S+" : "";
 
-    println (debugLastFuncName + ": " + modeName + "(" + modeSubMode + "): " +
-             buttonStr + ": " + action + " (" + val + ")");
+    if (M32.isDebug)
+        {
+        println (debugLastFuncName + ": " +
+                 modeName + "(" + modeSubMode + "): " +
+                 buttonStr + ": " + action + " (" + val + ")");
+        }
     }
 
 function logError (msg)
@@ -136,7 +152,15 @@ function onMidi0 (status, data1, data2) // onMidi0 events
     buttonStr = (M32.isShift ? "S+" : "") + M32.midiMapCC[ data1 ];
 
     // Shift button pressed status
-    if (M32.midiMapCC[ data1 ] == "SHIFT")
+    if (M32.midiMapCC[ data1 ] == "SUSTAIN")
+        {
+        if (data2 != 0) // ignore button release
+            {
+            M32.isDebug ^= 1;
+            println ("debug toggled " + (M32.isDebug ? "on" : "off"));
+            }
+        }
+    else if (M32.midiMapCC[ data1 ] == "SHIFT")
         {
         M32.isShift = !!data2;
         }

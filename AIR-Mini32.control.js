@@ -187,6 +187,22 @@ function handleGlobal (buttonStr, knob, data2)
         {
         switch (buttonStr)
             {
+            case "S+KNOB_1":
+                debugControl (buttonStr, data2, "nop");
+                break;
+
+            case "S+KNOB_2":
+                debugControl (buttonStr, data2, "nop");
+                break;
+
+            case "S+KNOB_3":
+                debugControl (buttonStr, data2, "nop");
+                break;
+
+            case "S+KNOB_4":
+                debugControl (buttonStr, data2, "nop");
+                break;
+
             case "S+KNOB_5":
                 debugControl (buttonStr, data2, "nop");
                 break;

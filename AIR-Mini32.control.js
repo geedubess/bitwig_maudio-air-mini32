@@ -1,382 +1,498 @@
-// M-Audio Axiom A.I.R. Mini32
+// M-Audio Axiom A.I.R. Mini32 Controller Script for BitWig
 
-loadAPI(1);
+loadAPI (1);
 
-host.defineController("MAudio", "Axiom A.I.R. Mini32", "2.1", "b73308a0-0c0e-11e7-9598-0800200c9a66");
-host.defineMidiPorts(2, 2); // Mini32 MIDI ports
-host.addDeviceNameBasedDiscoveryPair(["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"], ["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"]);
+host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
+                       "b73308a0-0c0e-11e7-9598-0800200c9a66");
 
-var LOWEST_CC = 1;
-var HIGHEST_CC = 119;
+host.defineMidiPorts (2, 2); // Mini32 MIDI ports: must use both
 
-var ccValue = initArray(0, ((HIGHEST_CC - LOWEST_CC + 1)*16));
-var ccValueOld = initArray(0, ((HIGHEST_CC - LOWEST_CC + 1)*16));
+host.addDeviceNameBasedDiscoveryPair (["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"],
+                                      ["Axiom A.I.R. Mini32 MIDI 1", "Axiom A.I.R. Mini32 MIDI 2"]);
 
 var M32 = {
-    MODE: 58, // MODE button
+    midiMapCC:  {
+                 16: "STOP",
+                 17: "PLAY",
+                 18: "RECORD",
+                 19: "UP",
+                 20: "DOWN",
+                 21: "RIGHT",
+                 22: "LEFT",
+                 23: "SHIFT",
+                 24: "KNOB_1",
+                 25: "KNOB_2",
+                 26: "KNOB_3",
+                 27: "KNOB_4",
+                 28: "KNOB_5",
+                 29: "KNOB_6",
+                 30: "KNOB_7",
+                 31: "KNOB_8",
+                 58: "MODE", // Used in Midi1 only
+                 },
+
+    KNOB_START_CC: 24,
+    KNOB_END_CC: 31,
+    LOWEST_CC: 1,
+    HIGHEST_CC: 119,
+
+    selectedTrack: 0,
+    isShift: false,
     isMode: 0,
     isSubMode: 1,
     isPreroll: 0,
-    modeName: [ARRANGER = ["ARRANGER", "TRACK", "DEVICE"], MIXER = ["MIXER", "VOLUME", "PAN", "DEVICE", "SEND 1", "SEND 2", "SEND 3", "SEND 4", "SEND 5", "SEND 6", "SEND 7", "SEND 8"]], // Modes and respective subModes nested array
-    selectedTrack: 0,
-    UP: 19,
-    DOWN: 20,
-    SHIFT: 23, // SHIFT button
-    isShift: false,
-    tapTempoNote: 36,
-    LEFT: 22,
-    RIGHT: 21,
-    STOP: 16,
-    PLAY: 17,
-    REC: 18,
-    KNOB_1: 24,
-    KNOB_2: 25,
-    KNOB_3: 26,
-    KNOB_4: 27,
-    KNOB_5: 28,
-    KNOB_6: 29,
-    KNOB_7: 30,
-    KNOB_8: 31,
-    KNOB_START_CC: 24,
-    KNOB_END_CC: 31,
+
+    modeName: [ // Modes and respective subModes nested array
+        ARRANGER = ["ARRANGER",
+                        "TRACK", "DEVICE"],
+        MIXER =    ["MIXER", "VOLUME", "PAN", "DEVICE",
+                             "SEND 1", "SEND 2", "SEND 3", "SEND 4",
+                             "SEND 5", "SEND 6", "SEND 7", "SEND 8"] ],
 };
 
-// CC range functions
-function inKnobRange(cc) {
-    return cc >= M32.KNOB_START_CC && cc <= M32.KNOB_END_CC;
-}
+var debugLastFuncName = "";
+
+function debugMidi (msg)
+    {
+    //println (msg);
+    }
+
+function debugControl (buttonStr, val, action)
+    {
+    modeName = M32.modeName[ M32.isMode ][ 0 ];
+    modeSubMode = M32.modeName[ M32.isMode ][ M32.isSubMode ];
+    shift = M32.isShift ? "S+" : "";
+
+    println (debugLastFuncName + ": " + modeName + "(" + modeSubMode + "): " +
+             buttonStr + ": " + action + " (" + val + ")");
+    }
+
+function logError (msg)
+    {
+    println ("ERROR: " + msg);
+    }
 
 // Initialize
-function init()
-{
-    M32.note = host.getMidiInPort(0).createNoteInput("Keys", "90????", "E000??", "B0????");
-    M32.note.setShouldConsumeEvents(false);
+function init ()
+    {
+    M32.note = host.getMidiInPort (0).createNoteInput ("Keys", "90????",
+                                                       "E000??", "B0????");
+    M32.note.setShouldConsumeEvents (false);
 
-    host.getMidiInPort(0).setMidiCallback(onMidi0);
-    host.getMidiInPort(1).setMidiCallback(onMidi1);
+    host.getMidiInPort (0).setMidiCallback (onMidi0);
+    host.getMidiInPort (1).setMidiCallback (onMidi1);
 
     /*
     Send init SysEx
-    WARNING: UPON LOADING THIS SCRIPT, THE FOLLOWING LINE WILL OVERWRITE MEMORY SLOT 0 (ZERO) ON YOUR MINI32. No other memory slots will be affected. The reason for initalizing slot 0 is because the Mini32's default knob-CC assignments (CC 1-8) overlaps standard MIDI funtions that will interfere with recodings.
+    WARNING: UPON LOADING THIS SCRIPT, THE FOLLOWING LINE WILL OVERWRITE MEMORY
+    SLOT 0 (ZERO) ON YOUR MINI32. No other memory slots will be affected. The
+    reason for initalizing slot 0 is because the Mini32's default knob-CC
+    assignments (CC 1-8) overlaps standard MIDI funtions that will interfere
+    with recodings.
     */
     host.getMidiOutPort(0).sendSysex("f0 00 01 05 20 7f 7f 00 00 00 01 00 10 00 10 00 00 00 00 00 00 00 09 00 00 00 00 00 40 00 00 00 7f 00 00 01 04 00 00 00 7f 00 40 00 01 00 00 00 7f 00 40 00 18 00 00 00 7f 00 19 00 00 00 7f 00 1a 00 00 00 7f 00 1b 00 00 00 7f 00 1c 00 00 00 7f 00 1d 00 00 00 7f 00 1e 00 00 00 7f 00 1f 00 00 00 7f 00 10 00 00 00 7f 00 11 00 00 00 7f 00 12 00 00 00 7f 00 13 00 00 00 7f 00 14 00 00 00 7f 00 15 00 00 00 7f 00 16 00 00 00 7f 00 17 00 00 00 7f 00 24 00 25 00 26 00 27 00 28 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 30 00 31 00 32 00 33 00 00 00 00 00 00 f7");
 
     // Create host objects
-    M32.application = host.createApplication();
-    M32.transport = host.createTransport();
-    M32.cursorTrack = host.createCursorTrack(8, 8);
-    M32.trackBank = host.createMainTrackBank(8, 8, 8);
-    M32.masterTrack0 = host.createMasterTrack(0);
-    M32.cursorDevice = host.createCursorDeviceSection(8);
-    M32.userControls = host.createUserControls((HIGHEST_CC - LOWEST_CC + 1)*16); // Make CCs 1-119 freely mappable for all 16 Channels
+    M32.application  = host.createApplication ();
+    M32.transport    = host.createTransport ();
+    M32.cursorTrack  = host.createCursorTrack (8, 8);
+    M32.trackBank    = host.createMainTrackBank (8, 8, 8);
+    M32.masterTrack0 = host.createMasterTrack (0);
+    M32.cursorDevice = host.createCursorDeviceSection (8);
 
-    for(var i = LOWEST_CC; i <= HIGHEST_CC; i++) {
-        for (var j = 1; j <= 16; j++) {
-            var c = i - LOWEST_CC + (j - 1) * (HIGHEST_CC-LOWEST_CC + 1);
-            M32.userControls.getControl(c).setLabel("CC " + i + " - Channel " + j);
-            //M32.userControls.getControl(c).addValueObserver(127, getValueObserverFunc(c, ccValue));
+    // Make CCs 1-119 freely mappable for all 16 Channels
+    M32.userControls = host.createUserControls ((M32.HIGHEST_CC - M32.LOWEST_CC + 1) * 16);
+
+    for (var i = M32.LOWEST_CC; i <= M32.HIGHEST_CC; i++)
+        {
+        for (var j = 1; j <= 16; j++)
+            {
+            var c = i - M32.LOWEST_CC + (j - 1) * (M32.HIGHEST_CC - M32.LOWEST_CC + 1);
+            M32.userControls.getControl (c).setLabel ("CC " + i + " - Channel " + j);
+            }
+        }
+    
+    for (var p = 0; p < 8; p++)
+        {
+        macro = M32.cursorDevice.getMacro (p).setIndication (true);
+        track = M32.trackBank.getChannel (p);
         }
     }
-    
-    for (var p = 0; p < 8; p++) {
-        macro = M32.cursorDevice.getMacro(p).setIndication(true);
-        track = M32.trackBank.getChannel(p);
-    }
-}
 
-// MIDI Events
-function onMidi0(status, data1, data2) // onMidi0 events
-{
-    //println("Midi 0")
-    //printMidi(status, data1, data2);
+function exit() {}
+
+function onMidi0 (status, data1, data2) // onMidi0 events
+    {
+    debugLastFuncName = "onMidi0";
+    debugMidi ("Midi 0: " + status + " " + data1 + " " + data2);
+
+    if (!isChannelController (status))
+        {
+        logError ("Midi0 received message not of type CC: " + status + " " + data1 + " " + data2);
+        return;
+        }
+
+    buttonStr = (M32.isShift ? "S+" : "") + M32.midiMapCC[ data1 ];
 
     // Shift button pressed status
-    if (status == 176)
-    {
-        switch (data1) {
-            case M32.SHIFT:
-                M32.isShift = data2 != 0;
-                break;
+    if (M32.midiMapCC[ data1 ] == "SHIFT")
+        {
+        M32.isShift = !!data2;
         }
-    }
-    
-    // MASTER section controls, accessible in any mode 
-    if (M32.isShift) 
+    else if (handleGlobal (buttonStr, inKnobRange (data1), data2) == false)
+        { // not a global CC/button
+        modeStr = M32.modeName[ M32.isMode ][ 0 ] + ":" +
+                  M32.modeName[ M32.isMode ][ M32.isSubMode ];
+
+        if (inKnobRange (data1))
+            {
+            handleModalKnobs (modeStr, buttonStr, data1, data2);
+            }
+        else if (data2 != 0) // modal buttons, excluding button releases
+            {
+            cursorAction (buttonStr);
+            }
+        }
+    } // end onMidi0 events
+
+function onMidi1 (status, data1, data2)
     {
-        switch (data1) {
-            case M32.KNOB_5:
-                //TBD
+    debugLastFuncName = "onMidi1";
+    debugMidi ("Midi 1: " + status + " " + data1 + " " + data2);
+    
+    buttonStr = (M32.isShift ? "S+" : "") + M32.midiMapCC[ data1 ];
+
+    if (data2 != 0) // ignore button release
+        {
+        switch (buttonStr)
+            {
+            case "MODE":
+                debugControl (buttonStr, data2, "cycle sub mode");
+                cycleSubMode ();
+                break;
+
+            case "S+MODE":
+                debugControl (buttonStr, data2, "cycle mode");
+                cycleMode ()
+                break;
+            }
+        }
+    } // end onMidi1 events
+
+function handleGlobal (buttonStr, knob, data2)
+    {
+    debugLastFuncName = "handleGlobal";
+    if (knob)
+        {
+        switch (buttonStr)
+            {
+            case "S+KNOB_5":
+                debugControl (buttonStr, data2, "nop");
                 break;
                 
-            case M32.KNOB_6: // Course tempo adjustment
-                M32.transport.getTempo().setRaw(data2 + 20);
+            case "S+KNOB_6":
+                debugControl (buttonStr, data2, "coarse tempo");
+                M32.transport.getTempo ().setRaw (data2 + 20);
                 break;
                 
-            case M32.KNOB_7: // Adjust click volume
-                M32.transport.setMetronomeValue(data2, 128);
-                metroVolume = Math.round((data2 / 127) * 100);
-                host.showPopupNotification("Click Volume: " + metroVolume + " %");
+            case "S+KNOB_7":
+                debugControl (buttonStr, data2, "click volume");
+                M32.transport.setMetronomeValue (data2, 128);
+                metroVolume = Math.round ((data2 / 127) * 100);
+                host.showPopupNotification ("Click Volume: " + metroVolume + " %");
                 break;
 
-            case M32.KNOB_8: // Master volume knob
-                M32.masterTrack0.getVolume().set(data2, 128);
+            case "S+KNOB_8":
+                debugControl (buttonStr, data2, "master volume");
+                M32.masterTrack0.getVolume ().set (data2, 128);
                 break;
-        }
-    }
-    
-    // ARRANGER mode knobs for selected track
-    if (M32.modeName[M32.isMode] == ARRANGER && M32.modeName[M32.isMode][M32.isSubMode] == "TRACK") 
-    {
-        if (status == 176 && data2 != 0) // ignore button release
+
+            default:
+                return false;
+            }
+        } // knob
+    else if (data2 != 0) // ignore button releases
         {
-            switch (data1) {
-                case M32.KNOB_1: // Volume selected track
-                    M32.cursorTrack.getVolume().set(data2, 128);
-                    break;
-
-                case M32.KNOB_2: // Pan selected track
-                    M32.cursorTrack.getPan().set(data2, 128);
-                    break;
-
-                case M32.KNOB_3: // Send 1 selected track
-                    M32.cursorTrack.getSend(0).set(data2, 128);
-                    break;
-
-                case M32.KNOB_4: // Send 2 selected track
-                    M32.cursorTrack.getSend(1).set(data2, 128);
-                    break;
-
-                case M32.KNOB_5:
-                    M32.cursorTrack.getSend(2).set(data2, 128);
-                    break;
-
-                case M32.KNOB_6:
-                    M32.cursorTrack.getSend(3).set(data2, 128);
-                    break;
-
-                case M32.KNOB_7:
-                    M32.cursorTrack.getSend(4).set(data2, 128);
-                    break;
-
-                case M32.KNOB_8: 
-                    M32.cursorTrack.getSend(5).set(data2, 128);
-                    break;
-            }
-        }
-    }
-
-    // MIXER mode knobs for selected trackBank
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "VOLUME")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
+        switch (buttonStr)
             {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getVolume().set(data2, 128);
+            case "PLAY":
+                debugControl (buttonStr, data2, "transport play");
+                M32.transport.play ();
+                break;
+
+            case "STOP":
+                debugControl (buttonStr, data2, "transport stop");
+                M32.transport.stop ();
+                break;
+
+            case "REC":
+                debugControl (buttonStr, data2, "mute selected track");
+                M32.transport.record ();
+                break;
+
+            case "S+PLAY":
+                debugControl (buttonStr, data2, "track solo toggle");
+                M32.cursorTrack.getSolo ().toggle ()
+                break;
+                
+            case "S+STOP":
+                debugControl (buttonStr, data2, "mute selected track");
+                M32.cursorTrack.getMute ().toggle ()
+                break;
+
+            case "S+REC":
+                debugControl (buttonStr, data2, "arm selected track");
+                M32.cursorTrack.getArm ().toggle ()
+                break;
+
+            case "S+UP":
+                debugControl (buttonStr, data2, "transport toggle overdub");
+                M32.transport.toggleOverdub ()
+                //this apiv1 call does not work in BW v2.2.3
+                //M32.transport.isArrangerOverdubEnabled ().toggle ();
+                break;
+
+            case "S+DOWN":
+                debugControl (buttonStr, data2, "transport toggle metronome");
+                M32.transport.toggleClick ()
+                break;
+
+            case "S+LEFT":
+                debugControl (buttonStr, data2, "application undo");
+                M32.application.undo ()
+                break;
+
+            case "S+RIGHT":
+                debugControl (buttonStr, data2, "application redo");
+                M32.application.redo ()
+                break;
+
+            default:
+                return false;
             }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "PAN")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getPan().set(data2, 128);
-            }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 1")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(0).set(data2, 128);
-            }
+        } // !knob && data2 != 0
+
+    return true;
     }
 
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 2")
+function handleArrangerKnobs (buttonStr, data2)
     {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(1).set(data2, 128);
-            }
-    }
-
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 3")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(2).set(data2, 128);
-            }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 4")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(3).set(data2, 128);
-            }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 5")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(4).set(data2, 128);
-            }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 6")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(5).set(data2, 128);
-            }
-    }
-
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 7")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(6).set(data2, 128);
-            }
-    }
-    
-    if (M32.modeName[M32.isMode] == MIXER && M32.modeName[M32.isMode][M32.isSubMode] == "SEND 8")
-    {
-        if (status == 176 && inKnobRange(data1) && M32.isShift == false)
-            {
-                M32.trackBank.getChannel(data1 - M32.KNOB_START_CC).getSend(7).set(data2, 128);
-            }
-    }
-    
-    //Macro KNOBS for selected device
-    if (M32.modeName[M32.isMode][M32.isSubMode] == "DEVICE") // Check if DEVICE submode
-    {
-        if (inKnobRange(data1))
+    debugLastFuncName = "handleArrangerKnobs";
+    switch (buttonStr)
         {
-            M32.cursorDevice.getMacro(data1 - M32.KNOB_START_CC).getAmount().set(data2, 128);
+        case "KNOB_1":
+            debugControl (buttonStr, data2, "track volume");
+            M32.cursorTrack.getVolume ().set (data2, 128);
+            break;
+
+        case "KNOB_2":
+            debugControl (buttonStr, data2, "track pan");
+            M32.cursorTrack.getPan ().set (data2, 128);
+            break;
+
+        case "KNOB_3":
+            debugControl (buttonStr, data2, "track send 1");
+            M32.cursorTrack.getSend (0).set (data2, 128);
+            break;
+
+        case "KNOB_4":
+            debugControl (buttonStr, data2, "track send 2");
+            M32.cursorTrack.getSend (1).set (data2, 128);
+            break;
+
+        case "KNOB_5":
+            debugControl (buttonStr, data2, "track send 3");
+            M32.cursorTrack.getSend (2).set (data2, 128);
+            break;
+
+        case "KNOB_6":
+            debugControl (buttonStr, data2, "track send 4");
+            M32.cursorTrack.getSend (3).set (data2, 128);
+            break;
+
+        case "KNOB_7":
+            debugControl (buttonStr, data2, "track send 5");
+            M32.cursorTrack.getSend (4).set (data2, 128);
+            break;
+
+        case "KNOB_8": 
+            debugControl (buttonStr, data2, "track send 6");
+            M32.cursorTrack.getSend (5).set (data2, 128);
+            break;
+
+        default:
+            logError ("handleArrangerKnobs: unhandled CC " + buttonStr + " in arranger(track) mode!");
         }
     }
-   
-    //Transport and cursor for tracks (up, down) and devices (left, right)
-    if (status == 176 && data2 != 0) // ignore button release
+
+function handleModalKnobs (modeStr, buttonStr, data1, data2)
     {
-        switch (data1) {
-            case M32.PLAY: // Play = play. Play + shift = solo selected track
-                M32.isShift ? M32.cursorTrack.getSolo().toggle() : M32.transport.play();
-                break;
+    debugLastFuncName = "handleModalKnobs";
+    channel = M32.trackBank.getChannel (data1 - M32.KNOB_START_CC);
+    macro   = M32.cursorDevice.getMacro (data1 - M32.KNOB_START_CC);
 
-            case M32.STOP: // Stop = Stop. Stop + shift = mute selected track
-                M32.isShift ? M32.cursorTrack.getMute().toggle() : M32.transport.stop();
-                break;
+    debugControl (buttonStr, data2, modeStr);
 
-            case M32.REC: // Rec = Record. Rec + shift = arm selected track
-                M32.isShift ? M32.cursorTrack.getArm().toggle() : M32.transport.record();
-                break;
+    switch (modeStr)
+        {
+        case "ARRANGER:TRACK": // arranger mode knobs for selected track
+            handleArrangerKnobs (buttonStr, data2);
+            break;
 
-            case M32.UP: // Up = previous track. Up + shift = metronome toggle
-                M32.isShift ? M32.transport.toggleOverdub() : cursorAction(M32.UP);
-                break;
+        case "MIXER:VOLUME": // volume mode knobs for selected trackBank
+            channel.getVolume ().set (data2, 128);
+            break;
 
-            case M32.DOWN: // Down = next track
-                M32.isShift ? M32.transport.toggleClick() : cursorAction(M32.DOWN);
-                break;
+        case "MIXER:PAN": // pan mode knobs for selected trackBank
+            channel.getPan ().set (data2, 128);
+            break;
 
-            case M32.LEFT: // Left = previous device. Left + shift = undo
-                M32.isShift ? M32.application.undo() : cursorAction(M32.LEFT);
-                break;
+        case "MIXER:SEND 1": // send mode knobs for selected trackBank
+            channel.getSend (0).set (data2, 128);
+            break;
 
-            case M32.RIGHT: // Right = next device. Right + shift = redo
-                M32.isShift ? M32.application.redo() : cursorAction(M32.RIGHT);
-                break;
-        }
+        case "MIXER:SEND 2":
+            channel.getSend (1).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 3":
+            channel.getSend (2).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 4":
+            channel.getSend (3).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 5":
+            channel.getSend (4).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 6":
+            channel.getSend (5).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 7":
+            channel.getSend (6).set (data2, 128);
+            break;
+
+        case "MIXER:SEND 8":
+            channel.getSend (7).set (data2, 128);
+            break;
+
+        case "ARRANGER:DEVICE":
+        case "MIXER:DEVICE": // device macro knobs for selected device
+            macro.getAmount ().set (data2, 128);
+            break;
+
+        default:
+            logError ("handleModalKnobs: unhandled CC " + buttonStr +
+                      " in " + modeStr + " mode!");
+        } // end switch
     }
-} // end onMidi0 events
 
-function onMidi1(status, data1, data2) { // onMidi1 events
-    
-    //println("Midi 1")
-    //printMidi(status, data1, data2);
-    
-    if (data2 > 0) // ignore button release
+// Cursor functions according to controller mode
+function cursorAction (cursorButton)
     {
-        switch (data1) {
-            case M32.MODE: // Cycle modes
-                M32.isShift ? cycleMode() : cycleSubMode();
-                break;
-        }
-    }
-} // end onMidi1 events
+    debugControl (cursorButton, 0, "cursor movement");
 
-// Cursor functions accroding to controller mode
-function cursorAction(cursorButton) {
-    // ARRANGER mode
-    if (M32.modeName[M32.isMode] == ARRANGER) 
-    {
-        if (cursorButton == M32.UP) {
-            return M32.cursorTrack.selectPrevious();
-        }
-        if (cursorButton == M32.DOWN) {
-            return M32.cursorTrack.selectNext();
-        }
-        if (cursorButton == M32.LEFT) {
-            return M32.cursorDevice.selectPrevious();
-        }
-        if (cursorButton == M32.RIGHT) {
-            return M32.cursorDevice.selectNext();
-        }
-    }
-    // MIXER mode
-    if (M32.modeName[M32.isMode] == MIXER) 
-    {
-        if (cursorButton == M32.UP) {
-            return M32.application.focusPanelAbove();
-        }
-        if (cursorButton == M32.DOWN) {
-            return M32.application.focusPanelBelow();
-        }
-        if (cursorButton == M32.LEFT) {
-            if (M32.modeName[M32.isMode][M32.isSubMode] == "DEVICE") {
-                return M32.cursorDevice.selectPrevious();
-            } else {
-                return M32.cursorTrack.selectPrevious();
-                setTrackSelected(M32.selectedTrack);
+    if (M32.modeName[ M32.isMode ][ 0 ] == ARRANGER) 
+        {
+        if (cursorButton == "UP")
+            {
+            return M32.cursorTrack.selectPrevious ();
+            }
+        if (cursorButton == "DOWN")
+            {
+            return M32.cursorTrack.selectNext ();
+            }
+        if (cursorButton == "LEFT")
+            {
+            return M32.cursorDevice.selectPrevious ();
+            }
+        if (cursorButton == "RIGHT")
+            {
+            return M32.cursorDevice.selectNext ();
             }
         }
-        if (cursorButton == M32.RIGHT) {
-            if (M32.modeName[M32.isMode][M32.isSubMode] == "DEVICE") {
-                return M32.cursorDevice.selectNext();
-            } else {
-                return M32.cursorTrack.selectNext();
-                setTrackSelected(M32.selectedTrack);
+    else if (M32.modeName[ M32.isMode ][ 0 ] == MIXER) 
+        {
+        if (cursorButton == "UP")
+            {
+            return M32.application.focusPanelAbove ();
+            }
+        if (cursorButton == "DOWN")
+            {
+            return M32.application.focusPanelBelow ();
+            }
+        if (cursorButton == "LEFT")
+            {
+            if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
+                {
+                return M32.cursorDevice.selectPrevious ();
+                }
+            else
+                {
+                return M32.cursorTrack.selectPrevious ();
+                setTrackSelected (M32.selectedTrack);
+                }
+            }
+        if (cursorButton == "RIGHT")
+            {
+            if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
+                {
+                return M32.cursorDevice.selectNext ();
+                }
+            else
+                {
+                return M32.cursorTrack.selectNext ();
+                setTrackSelected (M32.selectedTrack);
+                }
             }
         }
     }
-}
 
 // Cycle through controller modes and display onscreen
-function cycleMode() {
-    if (M32.isMode < (M32.modeName.length - 1)) {
+function cycleMode ()
+    {
+    if (M32.isMode < (M32.modeName.length - 1))
+        {
         M32.isMode++;
-    } else {
-        M32.isMode = 0;
-    }
+        }
+    else
+        {
+            M32.isMode = 0;
+        }
     M32.isSubMode = 1; // Reset isSubMode
     // Change panel layout
-    if (M32.modeName[M32.isMode] == MIXER) {
-        M32.application.setPanelLayout("MIX");
-    }
-    if (M32.modeName[M32.isMode] == ARRANGER) {
-        M32.application.setPanelLayout("ARRANGE");
-    }
-    host.showPopupNotification("Controller mode: " + M32.modeName[M32.isMode][0]);
+    if (M32.modeName[ M32.isMode ][ 0 ] == MIXER)
+        {
+        M32.application.setPanelLayout ("MIX");
+        }
+    if (M32.modeName[ M32.isMode ][ 0 ] == ARRANGER)
+        {
+        M32.application.setPanelLayout ("ARRANGE");
+        }
+
+    host.showPopupNotification ("Controller mode: " + M32.modeName[ M32.isMode ][ 0 ]);
 }
 
 // Cycle through subModes and display onscreen
-function cycleSubMode() {
-    if (M32.isSubMode < (M32.modeName[M32.isMode].length - 1)) {
-    M32.isSubMode++;
-    } else {
+function cycleSubMode ()
+    {
+    if (M32.isSubMode < (M32.modeName[ M32.isMode ].length - 1))
+        {
+        M32.isSubMode++;
+        }
+    else
+        {
     M32.isSubMode = 1;
-    }
-    host.showPopupNotification(M32.modeName[M32.isMode][0] + " sub-mode: " + M32.modeName[M32.isMode][M32.isSubMode]);
-}
+        }
 
-function exit() {}
+    host.showPopupNotification (M32.modeName[ M32.isMode ][ 0 ] + " sub-mode: " +
+                                M32.modeName[ M32.isMode ][ M32.isSubMode ]);
+    }
+
+function inKnobRange (cc)
+    {
+    return (cc >= M32.KNOB_START_CC && cc <= M32.KNOB_END_CC);
+    }

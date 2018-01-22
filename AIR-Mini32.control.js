@@ -111,7 +111,7 @@ function init ()
             M32.userControls.getControl (c).setLabel ("CC " + i + " - Channel " + j);
             }
         }
-    
+
     for (var p = 0; p < 8; p++)
         {
         macro = M32.cursorDevice.getMacro (p).setIndication (true);
@@ -159,7 +159,7 @@ function onMidi1 (status, data1, data2)
     {
     debugLastFuncName = "onMidi1";
     debugMidi ("Midi 1: " + status + " " + data1 + " " + data2);
-    
+
     buttonStr = (M32.isShift ? "S+" : "") + M32.midiMapCC[ data1 ];
 
     if (data2 != 0) // ignore button release
@@ -189,12 +189,12 @@ function handleGlobal (buttonStr, knob, data2)
             case "S+KNOB_5":
                 debugControl (buttonStr, data2, "nop");
                 break;
-                
+
             case "S+KNOB_6":
                 debugControl (buttonStr, data2, "coarse tempo");
                 M32.transport.getTempo ().setRaw (data2 + 20);
                 break;
-                
+
             case "S+KNOB_7":
                 debugControl (buttonStr, data2, "click volume");
                 M32.transport.setMetronomeValue (data2, 128);
@@ -234,7 +234,7 @@ function handleGlobal (buttonStr, knob, data2)
                 debugControl (buttonStr, data2, "track solo toggle");
                 M32.cursorTrack.getSolo ().toggle ()
                 break;
-                
+
             case "S+STOP":
                 debugControl (buttonStr, data2, "mute selected track");
                 M32.cursorTrack.getMute ().toggle ()
@@ -315,7 +315,7 @@ function handleArrangerKnobs (buttonStr, data2)
             M32.cursorTrack.getSend (4).set (data2, 128);
             break;
 
-        case "KNOB_8": 
+        case "KNOB_8":
             debugControl (buttonStr, data2, "track send 6");
             M32.cursorTrack.getSend (5).set (data2, 128);
             break;
@@ -331,7 +331,7 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
     channel = M32.trackBank.getChannel (data1 - M32.KNOB_START_CC);
     macro   = M32.cursorDevice.getMacro (data1 - M32.KNOB_START_CC);
 
-    debugControl (buttonStr, data2, modeStr);
+    debugControl (buttonStr, data2, "");
 
     switch (modeStr)
         {
@@ -393,59 +393,67 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
 // Cursor functions according to controller mode
 function cursorAction (cursorButton)
     {
-    debugControl (cursorButton, 0, "cursor movement");
-
-    if (M32.modeName[ M32.isMode ][ 0 ] == ARRANGER) 
+    if (M32.modeName[ M32.isMode ][ 0 ] == "ARRANGER")
         {
         if (cursorButton == "UP")
             {
+            debugControl (cursorButton, 0, "cursorTrack.selectPrevious");
             return M32.cursorTrack.selectPrevious ();
             }
         if (cursorButton == "DOWN")
             {
+            debugControl (cursorButton, 0, "cursorTrack.selectNext");
             return M32.cursorTrack.selectNext ();
             }
         if (cursorButton == "LEFT")
             {
+            debugControl (cursorButton, 0, "cursorDevice.selectPrevious");
             return M32.cursorDevice.selectPrevious ();
             }
         if (cursorButton == "RIGHT")
             {
+            debugControl (cursorButton, 0, "cursorDevice.selectNext");
             return M32.cursorDevice.selectNext ();
             }
         }
-    else if (M32.modeName[ M32.isMode ][ 0 ] == MIXER) 
+    else if (M32.modeName[ M32.isMode ][ 0 ] == "MIXER")
         {
         if (cursorButton == "UP")
             {
+            debugControl (cursorButton, 0, "application.focusPanelAbove");
             return M32.application.focusPanelAbove ();
             }
         if (cursorButton == "DOWN")
             {
+            debugControl (cursorButton, 0, "application.focusPanelBelow");
             return M32.application.focusPanelBelow ();
             }
         if (cursorButton == "LEFT")
             {
             if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
                 {
+                debugControl (cursorButton, 0, "cursorDevice.selectPrevious");
                 return M32.cursorDevice.selectPrevious ();
                 }
             else
                 {
+                debugControl (cursorButton, 0, "cursorTrack.selectPrevious");
+                //setTrackSelected (M32.selectedTrack);
                 return M32.cursorTrack.selectPrevious ();
-                setTrackSelected (M32.selectedTrack);
                 }
             }
         if (cursorButton == "RIGHT")
             {
             if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
                 {
+                debugControl (cursorButton, 0, "cursorDevice.selectNext");
                 return M32.cursorDevice.selectNext ();
                 }
             else
                 {
+                debugControl (cursorButton, 0, "cursorTrack.selectNext");
+                //setTrackSelected (M32.selectedTrack);
                 return M32.cursorTrack.selectNext ();
-                setTrackSelected (M32.selectedTrack);
                 }
             }
         }
@@ -454,22 +462,28 @@ function cursorAction (cursorButton)
 // Cycle through controller modes and display onscreen
 function cycleMode ()
     {
+    debugLastFuncName = "cycleMode";
+
     if (M32.isMode < (M32.modeName.length - 1))
         {
         M32.isMode++;
         }
     else
         {
-            M32.isMode = 0;
+        M32.isMode = 0;
         }
+
     M32.isSubMode = 1; // Reset isSubMode
+
     // Change panel layout
-    if (M32.modeName[ M32.isMode ][ 0 ] == MIXER)
+    if (M32.modeName[ M32.isMode ][ 0 ] == "MIXER")
         {
+        debugControl ("MODE", "MIX", "setPanelLayout");
         M32.application.setPanelLayout ("MIX");
         }
-    if (M32.modeName[ M32.isMode ][ 0 ] == ARRANGER)
+    if (M32.modeName[ M32.isMode ][ 0 ] == "ARRANGER")
         {
+        debugControl ("MODE", "ARRANGE", "setPanelLayout");
         M32.application.setPanelLayout ("ARRANGE");
         }
 
@@ -479,6 +493,8 @@ function cycleMode ()
 // Cycle through subModes and display onscreen
 function cycleSubMode ()
     {
+    debugLastFuncName = "cycleSubMode";
+
     if (M32.isSubMode < (M32.modeName[ M32.isMode ].length - 1))
         {
         M32.isSubMode++;

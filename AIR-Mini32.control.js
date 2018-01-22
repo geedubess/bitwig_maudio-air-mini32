@@ -99,6 +99,7 @@ function init ()
     M32.trackBank    = host.createMainTrackBank (8, 8, 8);
     M32.masterTrack0 = host.createMasterTrack (0);
     M32.cursorDevice = host.createCursorDeviceSection (8);
+    M32.cursor       = host.createCursorDeviceSection (0);
 
     // Make CCs 1-119 freely mappable for all 16 Channels
     M32.userControls = host.createUserControls ((M32.HIGHEST_CC - M32.LOWEST_CC + 1) * 16);
@@ -420,41 +421,23 @@ function cursorAction (cursorButton)
         {
         if (cursorButton == "UP")
             {
-            debugControl (cursorButton, 0, "application.focusPanelAbove");
+            debugControl (cursorButton, 0, "focusPanelAbove");
             return M32.application.focusPanelAbove ();
             }
         if (cursorButton == "DOWN")
             {
-            debugControl (cursorButton, 0, "application.focusPanelBelow");
+            debugControl (cursorButton, 0, "focusPanelBelow");
             return M32.application.focusPanelBelow ();
             }
         if (cursorButton == "LEFT")
             {
-            if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
-                {
-                debugControl (cursorButton, 0, "cursorDevice.selectPrevious");
-                return M32.cursorDevice.selectPrevious ();
-                }
-            else
-                {
-                debugControl (cursorButton, 0, "cursorTrack.selectPrevious");
-                //setTrackSelected (M32.selectedTrack);
-                return M32.cursorTrack.selectPrevious ();
-                }
+            debugControl (cursorButton, 0, "cursor.selectPrevious");
+            return M32.cursor.selectPrevious ();
             }
         if (cursorButton == "RIGHT")
             {
-            if (M32.modeName[ M32.isMode ][ M32.isSubMode ] == "DEVICE")
-                {
-                debugControl (cursorButton, 0, "cursorDevice.selectNext");
-                return M32.cursorDevice.selectNext ();
-                }
-            else
-                {
-                debugControl (cursorButton, 0, "cursorTrack.selectNext");
-                //setTrackSelected (M32.selectedTrack);
-                return M32.cursorTrack.selectNext ();
-                }
+            debugControl (cursorButton, 0, "cursor.selectNext");
+            return M32.cursor.selectNext ();
             }
         }
     }

@@ -1,13 +1,13 @@
 // M-Audio Axiom A.I.R. Mini32 Controller Script for BitWig
 
 // TODO:
-// switch to api2
-// add preroll
-// add quantization
-// use cursor keys to select clip?
+// add preroll (shift + knob 1)
+// add quantization (shift + knob 2 controls amount)
+// add clip launcher mode: use cursor keys to select clip?
+// not tested to support > 8 tracks
 // https://www.kvraudio.com/forum/viewtopic.php?f=268&t=481004&p=6727743&hilit=getMacro#p6727743
 
-loadAPI (2);
+loadAPI (4);
 
 host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
                        "b73308a0-0c0e-11e7-9598-0800200c9a66");
@@ -122,6 +122,7 @@ function init ()
 
     // Set up device remote controls
     M32.remoteControlPage = M32.cursorDevice.createCursorRemoteControlsPage ("CursorPage1", 8, "");
+    M32.remoteControlPage.selectedPageIndex().set(0);
 
     // Make CCs 1-119 freely mappable for all 16 Channels
     M32.userControls = host.createUserControls ((M32.HIGHEST_CC - M32.LOWEST_CC + 1) * 16);
@@ -137,7 +138,6 @@ function init ()
 
     for (var p = 0; p < 8; p++)
         {
-//        macro = M32.cursorDevice.getMacro (p).setIndication (true);
         M32.tracks[ p ] = M32.trackBank.getChannel (p);
         }
     }
@@ -151,8 +151,7 @@ function onMidi0 (status, data1, data2) // onMidi0 events
 
     if (!isChannelController (status))
         {
-        logError ("Midi0 received message not of type CC: " + status + " " + data1 + " " + data2);
-        return;
+        return; // eg, regular notes
         }
 
     buttonStr = (M32.isShift ? "S+" : "") + M32.midiMapCC[ data1 ];
@@ -273,7 +272,7 @@ function handleGlobal (buttonStr, knob, data2)
                 break;
 
             case "REC":
-                debugControl (buttonStr, data2, "mute selected track");
+                debugControl (buttonStr, data2, "transport record toggle");
                 M32.transport.record ();
                 break;
 
@@ -294,9 +293,8 @@ function handleGlobal (buttonStr, knob, data2)
 
             case "S+UP":
                 debugControl (buttonStr, data2, "transport toggle overdub");
-                M32.transport.toggleOverdub ()
-                //this apiv1 call does not work in BW v2.2.3
-                //M32.transport.isArrangerOverdubEnabled ().toggle ();
+                M32.transport.isArrangerOverdubEnabled ().toggle ();
+                M32.transport.isClipLauncherOverdubEnabled ().toggle ();
                 break;
 
             case "S+DOWN":
@@ -377,9 +375,6 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
     debugLastFuncName = "handleModalKnobs";
     knobIndex = data1 - M32.KNOB_START_CC;
     channel = M32.trackBank.getChannel (knobIndex);
-    //macro   = M32.cursorDevice.getMacro (knobIndex);
-
-    M32.remoteControlPage.selectedPageIndex().set(knobIndex);
 
     debugControl (buttonStr, data2, "");
 
@@ -431,8 +426,8 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
 
         case "ARRANGER:DEVICE":
         case "MIXER:DEVICE": // device macro knobs for selected device
-//            macro.getAmount ().set (data2, 128);
-            M32.remoteControlPage.getParameter(0).set(data2, 128);
+            M32.remoteControlPage.selectedPageIndex().set(0); // "Perform" preset page
+            M32.remoteControlPage.getParameter(knobIndex).set(data2, 128);
             break;
 
         default:
@@ -444,7 +439,8 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
 // Cursor functions according to controller mode
 function cursorAction (cursorButton)
     {
-    if (M32.modeName[ M32.isMode ][ 0 ] == "ARRANGER")
+    if ((M32.modeName[ M32.isMode ][ 0 ] == "ARRANGER") ||
+        (M32.modeName[ M32.isMode ][ 0 ] == "MIXER"))
         {
         if (cursorButton == "UP")
             {
@@ -467,29 +463,29 @@ function cursorAction (cursorButton)
             return M32.cursorDevice.selectNext ();
             }
         }
-    else if (M32.modeName[ M32.isMode ][ 0 ] == "MIXER")
-        {
-        if (cursorButton == "UP")
-            {
-            debugControl (cursorButton, 0, "focusPanelAbove");
-            return M32.application.focusPanelAbove ();
-            }
-        if (cursorButton == "DOWN")
-            {
-            debugControl (cursorButton, 0, "focusPanelBelow");
-            return M32.application.focusPanelBelow ();
-            }
-        if (cursorButton == "LEFT")
-            {
-            debugControl (cursorButton, 0, "cursor.selectPrevious");
-            return M32.cursor.selectPrevious ();
-            }
-        if (cursorButton == "RIGHT")
-            {
-            debugControl (cursorButton, 0, "cursor.selectNext");
-            return M32.cursor.selectNext ();
-            }
-        }
+//    else if (M32.modeName[ M32.isMode ][ 0 ] == "CLIPS")
+//        {
+//        if (cursorButton == "UP")
+//            {
+//            debugControl (cursorButton, 0, "focusPanelAbove");
+//            return M32.application.focusPanelAbove ();
+//            }
+//        if (cursorButton == "DOWN")
+//            {
+//            debugControl (cursorButton, 0, "focusPanelBelow");
+//            return M32.application.focusPanelBelow ();
+//            }
+//        if (cursorButton == "LEFT")
+//            {
+//            debugControl (cursorButton, 0, "cursor.selectPrevious");
+//            return M32.cursor.selectPrevious ();
+//            }
+//        if (cursorButton == "RIGHT")
+//            {
+//            debugControl (cursorButton, 0, "cursor.selectNext");
+//            return M32.cursor.selectNext ();
+//            }
+//        }
     }
 
 // Cycle through controller modes and display onscreen

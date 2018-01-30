@@ -3,9 +3,6 @@
 ## No warranty expressed or implied.
 ## I'm hacking this up because I enjoy using the Axiom AIR Mini 32 with Bitwig. I also happen to enjoy tearing things apart to see how they work, and then putting them together in a way that makes sense to me. This may not always correspond to the author's original vision. Many thanks to the original author, @lunardigs! : )
 
-## Things that don't work right (BW v2.2.3):
-* transport overdub toggling
-
 # bitwig_maudio-air-mini32 - 2.0
 
 ## 2.x.x controller script for the M-Audio Axion A.I.R. Mini32

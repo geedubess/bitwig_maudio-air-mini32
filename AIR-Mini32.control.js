@@ -5,8 +5,9 @@
 // add preroll
 // add quantization
 // use cursor keys to select clip?
+// https://www.kvraudio.com/forum/viewtopic.php?f=268&t=481004&p=6727743&hilit=getMacro#p6727743
 
-loadAPI (1);
+loadAPI (2);
 
 host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
                        "b73308a0-0c0e-11e7-9598-0800200c9a66");
@@ -45,11 +46,6 @@ var M32 = {
     LOWEST_CC: 1,
     HIGHEST_CC: 119,
 
-    isShift: false,
-    isMode: 0,
-    isSubMode: 1,
-    isDebug: 0,
-
     modeName: [ // Modes and respective subModes
         ARRANGER = ["ARRANGER",
                         "TRACK", "DEVICE"],
@@ -57,6 +53,13 @@ var M32 = {
                         "VOLUME", "PAN", "DEVICE",
                         "SEND 1", "SEND 2", "SEND 3", "SEND 4",
                         "SEND 5", "SEND 6", "SEND 7", "SEND 8"] ],
+
+    isShift: false,
+    isMode: 0,
+    isSubMode: 1,
+    isDebug: 0,
+
+    tracks: [],
 };
 
 var debugLastFuncName = "";
@@ -117,6 +120,9 @@ function init ()
     M32.cursorDevice = host.createCursorDeviceSection (8);
     M32.cursor       = host.createCursorDeviceSection (0);
 
+    // Set up device remote controls
+    M32.remoteControlPage = M32.cursorDevice.createCursorRemoteControlsPage ("CursorPage1", 8, "");
+
     // Make CCs 1-119 freely mappable for all 16 Channels
     M32.userControls = host.createUserControls ((M32.HIGHEST_CC - M32.LOWEST_CC + 1) * 16);
 
@@ -131,8 +137,8 @@ function init ()
 
     for (var p = 0; p < 8; p++)
         {
-        macro = M32.cursorDevice.getMacro (p).setIndication (true);
-        track = M32.trackBank.getChannel (p);
+//        macro = M32.cursorDevice.getMacro (p).setIndication (true);
+        M32.tracks[ p ] = M32.trackBank.getChannel (p);
         }
     }
 
@@ -369,8 +375,11 @@ function handleArrangerKnobs (buttonStr, data2)
 function handleModalKnobs (modeStr, buttonStr, data1, data2)
     {
     debugLastFuncName = "handleModalKnobs";
-    channel = M32.trackBank.getChannel (data1 - M32.KNOB_START_CC);
-    macro   = M32.cursorDevice.getMacro (data1 - M32.KNOB_START_CC);
+    knobIndex = data1 - M32.KNOB_START_CC;
+    channel = M32.trackBank.getChannel (knobIndex);
+    //macro   = M32.cursorDevice.getMacro (knobIndex);
+
+    M32.remoteControlPage.selectedPageIndex().set(knobIndex);
 
     debugControl (buttonStr, data2, "");
 
@@ -422,7 +431,8 @@ function handleModalKnobs (modeStr, buttonStr, data1, data2)
 
         case "ARRANGER:DEVICE":
         case "MIXER:DEVICE": // device macro knobs for selected device
-            macro.getAmount ().set (data2, 128);
+//            macro.getAmount ().set (data2, 128);
+            M32.remoteControlPage.getParameter(0).set(data2, 128);
             break;
 
         default:

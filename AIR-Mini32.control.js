@@ -1,13 +1,11 @@
 // M-Audio Axiom A.I.R. Mini32 Controller Script for BitWig
 
 // TODO:
-// add preroll (shift + knob 1)
-// add quantization (shift + knob 2 controls amount)
 // add clip launcher mode: use cursor keys to select clip?
 // not tested to support > 8 tracks
 // https://www.kvraudio.com/forum/viewtopic.php?f=268&t=481004&p=6727743&hilit=getMacro#p6727743
 
-loadAPI (4);
+loadAPI (2);
 
 host.defineController ("MAudio", "Axiom A.I.R. Mini32", "2.1",
                        "b73308a0-0c0e-11e7-9598-0800200c9a66");
@@ -54,12 +52,13 @@ var M32 = {
                         "SEND 1", "SEND 2", "SEND 3", "SEND 4",
                         "SEND 5", "SEND 6", "SEND 7", "SEND 8"] ],
 
+    preRollEnum: ["none", "one_bar", "two_bars", "four_bars"],
+
     isShift: false,
     isMode: 0,
     isSubMode: 1,
     isDebug: 0,
-
-    tracks: [],
+    isPreRoll: "init",
 };
 
 var debugLastFuncName = "";
@@ -134,11 +133,6 @@ function init ()
             var c = i - M32.LOWEST_CC + (j - 1) * (M32.HIGHEST_CC - M32.LOWEST_CC + 1);
             M32.userControls.getControl (c).setLabel ("CC " + i + " - Channel " + j);
             }
-        }
-
-    for (var p = 0; p < 8; p++)
-        {
-        M32.tracks[ p ] = M32.trackBank.getChannel (p);
         }
     }
 
@@ -217,7 +211,11 @@ function handleGlobal (buttonStr, knob, data2)
         switch (buttonStr)
             {
             case "S+KNOB_1":
-                debugControl (buttonStr, data2, "nop");
+                colors = knobToRGB (data2);
+//                println(data2 + " -> " + colors[0] + " " +colors[1] + " " +colors[2]);
+                debugControl (buttonStr, data2, "channel color");
+                channel = M32.cursorDevice.getChannel();
+                channel.color ().set (colors[0], colors[1], colors[2]);
                 break;
 
             case "S+KNOB_2":
@@ -233,7 +231,14 @@ function handleGlobal (buttonStr, knob, data2)
                 break;
 
             case "S+KNOB_5":
-                debugControl (buttonStr, data2, "nop");
+                preRollVal = M32.preRollEnum[ parseInt (data2 * 4 / 128) ];
+                debugControl (buttonStr, preRollVal, "preRoll");
+                if (preRollVal != M32.isPreRoll)
+                    {
+                    host.showPopupNotification ("Pre-roll: " + preRollVal);
+                    M32.transport.preRoll ().set (preRollVal);
+                    M32.isPreRoll = preRollVal;
+                    }
                 break;
 
             case "S+KNOB_6":
@@ -243,7 +248,7 @@ function handleGlobal (buttonStr, knob, data2)
 
             case "S+KNOB_7":
                 debugControl (buttonStr, data2, "click volume");
-                M32.transport.setMetronomeValue (data2, 128);
+                M32.transport.metronomeVolume ().set (data2, 128);
                 metroVolume = Math.round ((data2 / 127) * 100);
                 host.showPopupNotification ("Click Volume: " + metroVolume + " %");
                 break;
@@ -486,6 +491,49 @@ function cursorAction (cursorButton)
 //            return M32.cursor.selectNext ();
 //            }
 //        }
+    }
+
+// map 0-127 value uniformly across hue space
+function knobToRGB (x)
+    {
+    x = x * 12; // scale up to 256*6
+    if (x >= 0 && x < 1*256)          // 0-255; add blue
+        {
+        color_r = 255;
+        color_g = 0;
+        color_b = x;
+        }
+    else if (x >= 1*256 && x < 2*256) // 256-511; remove red
+        {
+        color_r = 2*256-1 - x
+        color_g = 0;
+        color_b = 255;
+        }
+    else if (x >= 2*256 && x < 3*256) // 512-767; add green
+        {
+        color_r = 0;
+        color_g = x - 2*256;
+        color_b = 255;
+        }
+    else if (x >= 3*256 && x < 4*256) // 768-1023; remove blue
+        {
+        color_r = 0;
+        color_g = 255;
+        color_b = 4*256-1 - x;
+        }
+    else if (x >= 4*256 && x < 5*256) // 1024-1279; add red
+        {
+        color_r = x - 4*256;
+        color_g = 255;
+        color_b = 0;
+        }
+    else if (x >= 5*256 && x < 6*256) // 1280-1535; remove green
+        {
+        color_r = 255;
+        color_g = 6*256-1 - x;
+        color_b = 0;
+        }
+    return ([ color_r/255, color_g/255, color_b/255 ]);
     }
 
 // Cycle through controller modes and display onscreen

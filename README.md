@@ -3,7 +3,7 @@
 ## No warranty expressed or implied.
 ## I'm hacking this up because I enjoy using the Axiom AIR Mini 32 with Bitwig. I also happen to enjoy tearing things apart to see how they work, and then putting them together in a way that makes sense to me. This may not always correspond to the author's original vision. Many thanks to the original author, @lunardigs! : )
 
-# bitwig_maudio-air-mini32 - 2.0
+# bitwig-maudio-air-mini32 - 2.0
 
 ## 2.x.x controller script for the M-Audio Axion A.I.R. Mini32
 
@@ -34,7 +34,9 @@ The Mini32 is a simple, light weight, 32 key keyboard controller with 8 drum pad
 * shift + right = redo
 
 ### Global Knobs
-* shift + knob {1-5} = nothing yet!
+* shift + knob 1     = set color of selected track
+* shift + knob {2-4} = nothing yet!
+* shift + knob 5     = pre-roll amount
 * shift + knob 6     = coarse tempo
 * shift + knob 7     = click volume
 * shift + knob 8     = master volume
